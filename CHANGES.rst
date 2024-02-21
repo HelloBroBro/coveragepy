@@ -28,6 +28,18 @@ Nothing yet.
 
 .. scriv-start-here
 
+.. _changes_7-4-2:
+
+Version 7.4.2 — 2024-02-20
+--------------------------
+
+- Fix: setting ``COVERAGE_CORE=sysmon`` no longer errors on 3.11 and lower,
+  thanks `Hugo van Kemenade <pull 1747_>`_.  It now issues a warning that
+  sys.monitoring is not available and falls back to the default core instead.
+
+.. _pull 1747: https://github.com/nedbat/coveragepy/pull/1747
+
+
 .. _changes_7-4-1:
 
 Version 7.4.1 — 2024-01-26

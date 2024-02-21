@@ -179,19 +179,19 @@ sample_html_beta: _sample_cog_html	## Generate sample HTML report for a beta rel
 
 REPO_OWNER = nedbat/coveragepy
 
-edit_for_release:			## Edit sources to insert release facts.
+edit_for_release:			#: Edit sources to insert release facts (see howto.txt).
 	python igor.py edit_for_release
 
 cheats:					## Create some useful snippets for releasing.
 	python igor.py cheats | tee cheats.txt
 
-relbranch:				## Create the branch for releasing.
+relbranch:				#: Create the branch for releasing (see howto.txt).
 	git switch -c nedbat/release-$$(date +%Y%m%d)
 
-relcommit1:				## Commit the first release changes.
+relcommit1:				#: Commit the first release changes (see howto.txt).
 	git commit -am "docs: prep for $$(python setup.py --version)"
 
-relcommit2:				## Commit the latest sample HTML report.
+relcommit2:				#: Commit the latest sample HTML report (see howto.txt).
 	git commit -am "docs: sample HTML for $$(python setup.py --version)"
 
 kit:					## Make the source distribution.
@@ -222,11 +222,11 @@ check_kits:				## Check that dist/* are well-formed.
 	python -m twine check dist/*
 	@echo $$(ls -1 dist | wc -l) distribution kits
 
-tag:					## Make a git tag with the version number.
+tag:					#: Make a git tag with the version number (see howto.txt).
 	git tag -s -m "Version $$(python setup.py --version)" $$(python setup.py --version)
 	git push --follow-tags
 
-bump_version:				## Edit sources to bump the version after a release.
+bump_version:				#: Edit sources to bump the version after a release (see howto.txt).
 	git switch -c nedbat/bump-version
 	python igor.py bump_version
 	git commit -a -m "build: bump version"

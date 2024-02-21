@@ -150,6 +150,11 @@ class Collector:
             core = "pytrace"
         else:
             core = os.getenv("COVERAGE_CORE")
+
+            if core == "sysmon" and not env.PYBEHAVIOR.pep669:
+                self.warn("sys.monitoring isn't available, using default core", slug="no-sysmon")
+                core = None
+
             if not core:
                 # Once we're comfortable with sysmon as a default:
                 # if env.PYBEHAVIOR.pep669 and self.should_start_context is None:
