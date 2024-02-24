@@ -28,6 +28,17 @@ Nothing yet.
 
 .. scriv-start-here
 
+.. _changes_7-4-3:
+
+Version 7.4.3 — 2024-02-23
+--------------------------
+
+- Fix: in some cases, coverage could fail with a RuntimeError: "Set changed
+  size during iteration." This is now fixed, closing `issue 1733`_.
+
+.. _issue 1733: https://github.com/nedbat/coveragepy/issues/1733
+
+
 .. _changes_7-4-2:
 
 Version 7.4.2 — 2024-02-20
