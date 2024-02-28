@@ -9,7 +9,7 @@ import json
 import os
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import coverage
 from coverage import Coverage
@@ -24,7 +24,7 @@ class JsonReportTest(UsingModulesMixin, CoverageTest):
     def _assert_expected_json_report(
         self,
         cov: Coverage,
-        expected_result: Dict[str, Any],
+        expected_result: dict[str, Any],
     ) -> None:
         """
         Helper that handles common ceremonies so tests can clearly show the
@@ -47,7 +47,7 @@ class JsonReportTest(UsingModulesMixin, CoverageTest):
         with open(output_path) as result_file:
             parsed_result = json.load(result_file)
         self.assert_recent_datetime(
-            datetime.strptime(parsed_result['meta']['timestamp'], "%Y-%m-%dT%H:%M:%S.%f")
+            datetime.strptime(parsed_result['meta']['timestamp'], "%Y-%m-%dT%H:%M:%S.%f"),
         )
         del (parsed_result['meta']['timestamp'])
         expected_result["meta"].update({
@@ -142,16 +142,16 @@ class JsonReportTest(UsingModulesMixin, CoverageTest):
 
     def run_context_test(self, relative_files: bool) -> None:
         """A helper for two tests below."""
-        self.make_file("config", """\
+        self.make_file("config", f"""\
             [run]
-            relative_files = {}
+            relative_files = {relative_files}
 
             [report]
             precision = 2
 
             [json]
             show_contexts = True
-            """.format(relative_files))
+            """)
         cov = coverage.Coverage(context="cool_test", config_file="config")
         expected_result = {
             'meta': {
@@ -165,19 +165,19 @@ class JsonReportTest(UsingModulesMixin, CoverageTest):
                     'excluded_lines': [],
                     "contexts": {
                         "1": [
-                            "cool_test"
+                            "cool_test",
                         ],
                         "2": [
-                            "cool_test"
+                            "cool_test",
                         ],
                         "4": [
-                            "cool_test"
+                            "cool_test",
                         ],
                         "5": [
-                            "cool_test"
+                            "cool_test",
                         ],
                         "8": [
-                            "cool_test"
+                            "cool_test",
                         ],
                     },
                     'summary': {
