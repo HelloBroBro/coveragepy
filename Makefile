@@ -118,7 +118,7 @@ _upgrade:
 doc_upgrade: export CUSTOM_COMPILE_COMMAND=make doc_upgrade
 doc_upgrade: $(DOCBIN)			## Update the doc/requirements.pip file
 	$(DOCBIN)/pip install -q -r requirements/pip-tools.pip
-	$(DOCBIN)/$(PIP_COMPILE) -o doc/requirements.pip doc/requirements.in
+	$(DOCBIN)/$(PIP_COMPILE) --upgrade -o doc/requirements.pip doc/requirements.in
 
 diff_upgrade:				## Summarize the last `make upgrade`
 	@# The sort flags sort by the package name first, then by the -/+, and
@@ -254,7 +254,8 @@ docdev: dochtml				## Build docs, and auto-watch for changes.
 	PATH=$(DOCBIN):$(PATH) $(SPHINXAUTOBUILD) -b html doc doc/_build/html
 
 docspell: $(DOCBIN)			## Run the spell checker on the docs.
-	$(SPHINXBUILD) -b spelling doc doc/_spell
+	# Very mac-specific...
+	PYENCHANT_LIBRARY_PATH=/opt/homebrew/lib/libenchant-2.dylib $(SPHINXBUILD) -b spelling doc doc/_spell
 
 
 ##@ Publishing docs
