@@ -13,6 +13,7 @@ import sys
 import token
 import tokenize
 
+from dataclasses import dataclass
 from types import CodeType
 from typing import (
     cast, Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence,
@@ -462,7 +463,8 @@ class ByteParser:
 # AST analysis
 #
 
-class ArcStart(collections.namedtuple("Arc", "lineno, cause")):
+@dataclass(frozen=True, order=True)
+class ArcStart:
     """The information needed to start an arc.
 
     `lineno` is the line number the arc starts from.
@@ -474,8 +476,8 @@ class ArcStart(collections.namedtuple("Arc", "lineno, cause")):
     to have `lineno` interpolated into it.
 
     """
-    def __new__(cls, lineno: TLineNo, cause: str | None = None) -> ArcStart:
-        return super().__new__(cls, lineno, cause)
+    lineno: TLineNo
+    cause: str = ""
 
 
 class TAddArcFn(Protocol):
@@ -1112,7 +1114,9 @@ class AstArcAnalyzer:
                 exits |= self.add_body_arcs(case.body, from_start=from_start)
                 last_start = case_start
             if not had_wildcard:
-                exits.add(from_start)
+                exits.add(
+                    ArcStart(case_start, cause="the pattern on line {lineno} always matched"),
+                )
             return exits
 
     def _handle__NodeList(self, node: NodeList) -> set[ArcStart]:
@@ -1254,7 +1258,7 @@ class AstArcAnalyzer:
         """
         causes = []
         for start in sorted(starts):
-            if start.cause is not None:
+            if start.cause:
                 causes.append(start.cause.format(lineno=start.lineno))
         cause = " or ".join(causes)
         exits = {ArcStart(xit.lineno, cause) for xit in exits}
