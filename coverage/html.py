@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import collections
+import dataclasses
 import datetime
 import functools
 import json
@@ -15,7 +16,7 @@ import shutil
 import string
 
 from dataclasses import dataclass
-from typing import Any, Iterable, TYPE_CHECKING, cast
+from typing import Any, Iterable, TYPE_CHECKING, TypedDict, cast
 
 import coverage
 from coverage.data import CoverageData, add_data_to_hash
@@ -31,26 +32,26 @@ from coverage.version import __url__
 
 
 if TYPE_CHECKING:
-    # To avoid circular imports:
     from coverage import Coverage
     from coverage.plugins import FileReporter
 
-    # To be able to use 3.8 typing features, and still run on 3.7:
-    from typing import TypedDict
-
-    class IndexInfoDict(TypedDict):
-        """Information for each file, to render the index file."""
-        nums: Numbers
-        html_filename: str
-        relative_filename: str
-
-    class FileInfoDict(TypedDict):
-        """Summary of the information from last rendering, to avoid duplicate work."""
-        hash: str
-        index: IndexInfoDict
-
 
 os = isolate_module(os)
+
+
+class IndexInfoDict(TypedDict):
+    """Information for each file, to render the index file."""
+    # For in-memory use, we have Numbers.  For serialization, we write a list
+    # of ints.  Two fields keeps the type-checker happier.
+    nums: Numbers | None
+    numlist: list[int]
+    html_filename: str
+    relative_filename: str
+
+class FileInfoDict(TypedDict):
+    """Summary of the information from last rendering, to avoid duplicate work."""
+    hash: str
+    index: IndexInfoDict
 
 
 def data_filename(fname: str) -> str:
@@ -463,6 +464,7 @@ class HtmlReporter:
         # Save this file's information for the index file.
         index_info: IndexInfoDict = {
             "nums": ftr.analysis.numbers,
+            "numlist": [],
             "html_filename": ftr.html_filename,
             "relative_filename": ftr.fr.relative_filename(),
         }
@@ -515,9 +517,10 @@ class IncrementalChecker:
     #  The data looks like:
     #
     #  {
+    #      "note": "This file is an internal implementation detail ...",
     #      "format": 2,
-    #      "globals": "540ee119c15d52a68a53fe6f0897346d",
     #      "version": "4.0a1",
+    #      "globals": "540ee119c15d52a68a53fe6f0897346d",
     #      "files": {
     #          "cogapp___init__": {
     #              "hash": "e45581a5b48f879f301c0f30bf77a50c",
@@ -567,7 +570,7 @@ class IncrementalChecker:
         if usable:
             self.files = {}
             for filename, fileinfo in status["files"].items():
-                fileinfo["index"]["nums"] = Numbers(*fileinfo["index"]["nums"])
+                fileinfo["index"]["nums"] = Numbers(*fileinfo["index"]["numlist"])
                 self.files[filename] = fileinfo
             self.globals = status["globals"]
         else:
@@ -579,7 +582,9 @@ class IncrementalChecker:
         files = {}
         for filename, fileinfo in self.files.items():
             index = fileinfo["index"]
-            index["nums"] = index["nums"].init_args()   # type: ignore[typeddict-item]
+            assert index["nums"] is not None
+            index["numlist"] = list(dataclasses.astuple(index["nums"]))
+            index["nums"] = None
             files[filename] = fileinfo
 
         status = {
