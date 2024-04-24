@@ -109,7 +109,7 @@ class HtmlTestHelpers(CoverageTest):
         )
 
     def assert_valid_hrefs(self) -> None:
-        """Assert that the hrefs in htmlcov/*.html to see the references are valid.
+        """Assert that the hrefs in htmlcov/*.html are valid.
 
         Doesn't check external links (those with a protocol).
         """
@@ -125,6 +125,7 @@ class HtmlTestHelpers(CoverageTest):
                     continue
                 if "://" in href:
                     continue
+                href = href.partition("#")[0]   # ignore fragment in URLs.
                 hrefs[href].add(fname)
         for href, sources in hrefs.items():
             assert os.path.exists(f"htmlcov/{href}"), (
@@ -179,6 +180,8 @@ class HtmlDeltaTest(HtmlTestHelpers, CoverageTest):
     def assert_htmlcov_files_exist(self) -> None:
         """Assert that all the expected htmlcov files exist."""
         self.assert_exists("htmlcov/index.html")
+        self.assert_exists("htmlcov/function_index.html")
+        self.assert_exists("htmlcov/class_index.html")
         self.assert_exists("htmlcov/main_file_py.html")
         self.assert_exists("htmlcov/helper1_py.html")
         self.assert_exists("htmlcov/helper2_py.html")
@@ -310,7 +313,7 @@ class HtmlDeltaTest(HtmlTestHelpers, CoverageTest):
         with open("htmlcov/status.json") as status_json:
             status_data = json.load(status_json)
 
-        assert status_data['format'] == 2
+        assert status_data['format'] == 5
         status_data['format'] = 99
         with open("htmlcov/status.json", "w") as status_json:
             json.dump(status_data, status_json)
@@ -616,6 +619,26 @@ class HtmlTest(HtmlTestHelpers, CoverageTest):
         res = self.run_coverage(covargs=dict(source="."), htmlargs=dict(skip_covered=True))
         assert res == 100.0
         self.assert_doesnt_exist("htmlcov/main_file_py.html")
+        # Since there are no files to report, we can't collect any region
+        # information, so there are no region-based index pages.
+        self.assert_doesnt_exist("htmlcov/function_index.html")
+        self.assert_doesnt_exist("htmlcov/class_index.html")
+
+    def test_report_skip_covered_100_functions(self) -> None:
+        self.make_file("main_file.py", """\
+            def normal():
+                print("z")
+            def abnormal():
+                print("a")
+            normal()
+        """)
+        res = self.run_coverage(covargs=dict(source="."), htmlargs=dict(skip_covered=True))
+        assert res == 80.0
+        self.assert_exists("htmlcov/main_file_py.html")
+        # We have a file to report, so we get function and class index pages,
+        # even though there are no classes.
+        self.assert_exists("htmlcov/function_index.html")
+        self.assert_exists("htmlcov/class_index.html")
 
     def make_init_and_main(self) -> None:
         """Helper to create files for skip_empty scenarios."""
@@ -718,6 +741,10 @@ class HtmlGoldTest(CoverageTest):
             '<td class="right" data-ratio="2 3">67%</td>',
         )
 
+    @pytest.mark.skipif(
+        env.PYPY and env.PYVERSION[:2] == (3, 8),
+        reason="PyPy 3.8 produces different results!?",
+    )
     def test_b_branch(self) -> None:
         self.make_file("b.py", """\
             def one(x):

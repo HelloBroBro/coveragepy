@@ -23,15 +23,44 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+Nothing yet.
+
+
+.. scriv-start-here
+
+.. _changes_7-5-0:
+
+Version 7.5.0 — 2024-04-23
+--------------------------
+
+- Added initial support for function and class reporting in the HTML report.
+  There are now three index pages which link to each other: files, functions,
+  and classes.  Other reports don't yet have this information, but it will be
+  added in the future where it makes sense.  Feedback gladly accepted!
+  Finishes `issue 780`_.
+
+- Other HTML report improvements:
+
+  - There is now a "hide covered" checkbox to filter out 100% files, finishing
+    `issue 1384`_.
+
+  - The index page is always sorted by one of its columns, with clearer
+    indications of the sorting.
+
+  - The "previous file" shortcut key didn't work on the index page, but now it
+    does, fixing `issue 1765`_.
+
 - The debug output showing which configuration files were tried now shows
   absolute paths to help diagnose problems where settings aren't taking effect,
   and is renamed from "attempted_config_files" to the more logical
   "config_files_attempted."
 
-- Python 3.13.0a5 is supported.
+- Python 3.13.0a6 is supported.
 
+.. _issue 780: https://github.com/nedbat/coveragepy/issues/780
+.. _issue 1384: https://github.com/nedbat/coveragepy/issues/1384
+.. _issue 1765: https://github.com/nedbat/coveragepy/issues/1765
 
-.. scriv-start-here
 
 .. _changes_7-4-4:
 
