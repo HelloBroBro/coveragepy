@@ -76,10 +76,10 @@ metacov:				## Run meta-coverage, measuring ourself.
 	COVERAGE_COVERAGE=yes tox -q $(ARGS)
 
 metahtml:				## Produce meta-coverage HTML reports.
-	python igor.py combine_html
+	tox exec -q $(ARGS) -- python3 igor.py combine_html
 
 metasmoke:
-	COVERAGE_TEST_CORES=ctrace ARGS="-e py39" make metacov metahtml
+	COVERAGE_TEST_CORES=ctrace ARGS="-e py39" make --keep-going metacov metahtml
 
 
 ##@ Requirements management
@@ -195,6 +195,7 @@ relcommit1:				#: Commit the first release changes (see howto.txt).
 	git commit -am "docs: prep for $$(python setup.py --version)"
 
 relcommit2:				#: Commit the latest sample HTML report (see howto.txt).
+	git add doc/sample_html
 	git commit -am "docs: sample HTML for $$(python setup.py --version)"
 
 kit:					## Make the source distribution.
