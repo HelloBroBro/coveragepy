@@ -28,6 +28,23 @@ Nothing yet.
 
 .. scriv-start-here
 
+.. _changes_7-5-3:
+
+Version 7.5.3 — 2024-05-28
+--------------------------
+
+- Performance improvements for combining data files, especially when measuring
+  line coverage. A few different quadratic behaviors were eliminated. In one
+  extreme case of combining 700+ data files, the time dropped from more than
+  three hours to seven minutes.  Thanks for Kraken Tech for funding the fix.
+
+- Performance improvements for generating HTML reports, with a side benefit of
+  reducing memory use, closing `issue 1791`_.  Thanks to Daniel Diniz for
+  helping to diagnose the problem.
+
+.. _issue 1791: https://github.com/nedbat/coveragepy/issues/1791
+
+
 .. _changes_7-5-2:
 
 Version 7.5.2 — 2024-05-24
