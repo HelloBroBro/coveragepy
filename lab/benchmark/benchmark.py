@@ -1,8 +1,14 @@
+# Licensed under the Apache License: http://www.apache.org/licenses/LICENSE-2.0
+# For details: https://github.com/nedbat/coveragepy/blob/master/NOTICE.txt
+
 """Run performance comparisons for versions of coverage"""
+
+from __future__ import annotations
 
 import collections
 import contextlib
 import itertools
+import json
 import os
 import random
 import shutil
@@ -10,12 +16,19 @@ import statistics
 import subprocess
 import sys
 import time
+
 from pathlib import Path
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from io import TextIOWrapper
+from types import TracebackType
+from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Tuple, Type, cast
 
+import requests
 import tabulate
+
+TweaksType = Optional[Iterable[Tuple[str, Any]]]
+Env_VarsType = Optional[Dict[str, str]]
 
 
 class ShellSession:
@@ -27,19 +40,22 @@ class ShellSession:
     def __init__(self, output_filename: str):
         self.output_filename = output_filename
         self.last_duration: float = 0
-        self.foutput = None
-        self.env_vars = {}
+        self.foutput: TextIOWrapper | None = None
+        self.env_vars = {"PATH": os.getenv("PATH")}
 
-    def __enter__(self):
+    def __enter__(self) -> ShellSession:
         self.foutput = open(self.output_filename, "a", encoding="utf-8")
         print(f"Logging output to {os.path.abspath(self.output_filename)}")
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.foutput.close()
+    def __exit__(
+        self, exc_type: Type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
+    ) -> None:
+        if self.foutput is not None:
+            self.foutput.close()
 
     @contextlib.contextmanager
-    def set_env(self, env_vars):
+    def set_env(self, env_vars: dict[str, str] | None) -> Iterator[None]:
         old_env_vars = self.env_vars
         if env_vars:
             self.env_vars = dict(old_env_vars)
@@ -49,11 +65,11 @@ class ShellSession:
         finally:
             self.env_vars = old_env_vars
 
-    def print(self, *args, **kwargs):
+    def print(self, *args: Any, **kwargs: Any) -> None:
         """Print a message to this shell's log."""
         print(*args, **kwargs, file=self.foutput)
 
-    def print_banner(self, *args, **kwargs):
+    def print_banner(self, *args: Any, **kwargs: Any) -> None:
         """Print a distinguished banner to the log."""
         self.print("\n######> ", end="")
         self.print(*args, **kwargs)
@@ -74,7 +90,7 @@ class ShellSession:
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            env=self.env_vars,
+            env=cast(Mapping[str, str], self.env_vars),
         )
         output = proc.stdout.decode("utf-8")
         self.last_duration = time.perf_counter() - start
@@ -120,6 +136,7 @@ def file_replace(file_name: Path, old_text: str, new_text: str) -> Iterator[None
     """
     Replace some text in `file_name`, and change it back.
     """
+    file_text = ""
     if old_text:
         file_text = file_name.read_text()
         if old_text not in file_text:
@@ -133,68 +150,101 @@ def file_replace(file_name: Path, old_text: str, new_text: str) -> Iterator[None
             file_name.write_text(file_text)
 
 
+def file_must_exist(file_name: str, kind: str = "file") -> Path:
+    """
+    Check that a file exists, for early validation of pip (etc) arguments.
+
+    Raises an exception if it doesn't exist.  Returns the resolved path if it
+    does exist so we can use relative paths and they'll still work once we've
+    cd'd to the temporary workspace.
+    """
+    path = Path(file_name).expanduser().resolve()
+    if not path.exists():
+        kind = kind[0].upper() + kind[1:]
+        raise RuntimeError(f"{kind} {file_name!r} doesn't exist")
+    return path
+
+
+def url_must_exist(url: str) -> bool:
+    """
+    Check that a URL exists, for early validation of pip (etc) arguments.
+
+    Raises an exception if it doesn't exist.
+    """
+    resp = requests.head(url)
+    resp.raise_for_status()
+    return True
+
+
 class ProjectToTest:
     """Information about a project to use as a test case."""
 
     # Where can we clone the project from?
-    git_url: Optional[str] = None
-    slug: Optional[str] = None
+    git_url: str = ""
+    slug: str = ""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        url_must_exist(self.git_url)
         if not self.slug:
             if self.git_url:
                 self.slug = self.git_url.split("/")[-1]
 
-    def shell(self):
+    def shell(self) -> ShellSession:
         return ShellSession(f"output_{self.slug}.log")
 
-    def make_dir(self):
+    def make_dir(self) -> None:
         self.dir = Path(f"work_{self.slug}")
         if self.dir.exists():
             rmrf(self.dir)
 
-    def get_source(self, shell):
+    def get_source(self, shell: ShellSession, retries: int = 5) -> None:
         """Get the source of the project."""
-        shell.run_command(f"git clone {self.git_url} {self.dir}")
+        for retry in range(retries):
+            try:
+                shell.run_command(f"git clone {self.git_url} {self.dir}")
+                return
+            except Exception as e:
+                print(f"Retrying to clone {self.git_url} due to error:\n{e}")
+                if retry == retries - 1:
+                    raise e
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         """Prepare the environment to run the test suite.
 
         This is not timed.
         """
-        pass
 
     @contextlib.contextmanager
-    def tweak_coverage_settings(
-        self, settings: Iterable[Tuple[str, Any]]
-    ) -> Iterator[None]:
+    def tweak_coverage_settings(self, settings: TweaksType) -> Iterator[None]:
         """Tweak the coverage settings.
 
         NOTE: This is not properly factored, and is only used by ToxProject now!!!
         """
         yield
 
-    def pre_check(self, env):
+    def pre_check(self, env: Env) -> None:
         pass
 
-    def post_check(self, env):
+    def post_check(self, env: Env) -> None:
         pass
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         """Run the test suite with no coverage measurement.
 
         Returns the duration of the run.
         """
-        pass
+        return 0.0
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         """Run the test suite with coverage measurement.
 
         Must install a particular version of coverage using `pip_args`.
 
         Returns the duration of the run.
         """
-        pass
+        return 0.0
 
 
 class EmptyProject(ProjectToTest):
@@ -204,14 +254,16 @@ class EmptyProject(ProjectToTest):
         self.slug = slug
         self.durations = iter(itertools.cycle(fake_durations))
 
-    def get_source(self, shell):
+    def get_source(self, shell: ShellSession, retries: int = 5) -> None:
         pass
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         """Run the test suite with coverage measurement."""
         return next(self.durations)
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         """Run the test suite with coverage measurement."""
         return next(self.durations)
 
@@ -219,19 +271,21 @@ class EmptyProject(ProjectToTest):
 class ToxProject(ProjectToTest):
     """A project using tox to run the test suite."""
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         env.shell.run_command(f"{env.python} -m pip install tox")
         self.run_tox(env, env.pyver.toxenv, "--notest")
 
-    def run_tox(self, env, toxenv, toxargs=""):
+    def run_tox(self, env: Env, toxenv: str, toxargs: str = "") -> float:
         """Run a tox command. Return the duration."""
-        env.shell.run_command(f"{env.python} -m tox -e {toxenv} {toxargs}")
+        env.shell.run_command(f"{env.python} -m tox -v -e {toxenv} {toxargs}")
         return env.shell.last_duration
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         return self.run_tox(env, env.pyver.toxenv, "--skip-pkg-install")
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         self.run_tox(env, env.pyver.toxenv, "--notest")
         env.shell.run_command(
             f".tox/{env.pyver.toxenv}/bin/python -m pip install {pip_args}"
@@ -250,9 +304,11 @@ class ProjectPytestHtml(ToxProject):
 
     git_url = "https://github.com/pytest-dev/pytest-html"
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         raise Exception("This doesn't work because options changed to tweaks")
-        covenv = env.pyver.toxenv + "-cov"
+        covenv = env.pyver.toxenv + "-cov"  # type: ignore[unreachable]
         self.run_tox(env, covenv, "--notest")
         env.shell.run_command(f".tox/{covenv}/bin/python -m pip install {pip_args}")
         if cov_tweaks:
@@ -270,11 +326,11 @@ class ProjectDateutil(ToxProject):
 
     git_url = "https://github.com/dateutil/dateutil"
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         super().prep_environment(env)
         env.shell.run_command(f"{env.python} updatezinfo.py")
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         env.shell.run_command("echo No option to run without coverage")
         return 0
 
@@ -284,15 +340,14 @@ class ProjectAttrs(ToxProject):
 
     git_url = "https://github.com/python-attrs/attrs"
 
-    def tweak_coverage_settings(
-        self, tweaks: Iterable[Tuple[str, Any]]
-    ) -> Iterator[None]:
+    @contextlib.contextmanager
+    def tweak_coverage_settings(self, tweaks: TweaksType) -> Iterator[None]:
         return tweak_toml_coverage_settings("pyproject.toml", tweaks)
 
-    def pre_check(self, env):
+    def pre_check(self, env: Env) -> None:
         env.shell.run_command("cat pyproject.toml")
 
-    def post_check(self, env):
+    def post_check(self, env: Env) -> None:
         env.shell.run_command("ls -al")
 
 
@@ -301,7 +356,7 @@ class ProjectDjangoAuthToolkit(ToxProject):
 
     git_url = "https://github.com/jazzband/django-oauth-toolkit"
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         env.shell.run_command("echo No option to run without coverage")
         return 0
 
@@ -318,19 +373,21 @@ class ProjectDjango(ToxProject):
 class ProjectMashumaro(ProjectToTest):
     git_url = "https://github.com/Fatal1ty/mashumaro"
 
-    def __init__(self, more_pytest_args=""):
+    def __init__(self, more_pytest_args: str = ""):
         super().__init__()
         self.more_pytest_args = more_pytest_args
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         env.shell.run_command(f"{env.python} -m pip install .")
         env.shell.run_command(f"{env.python} -m pip install -r requirements-dev.txt")
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         env.shell.run_command(f"{env.python} -m pytest {self.more_pytest_args}")
         return env.shell.last_duration
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         env.shell.run_command(f"{env.python} -m pip install {pip_args}")
         env.shell.run_command(
             f"{env.python} -m pytest --cov=mashumaro --cov=tests {self.more_pytest_args}"
@@ -342,7 +399,7 @@ class ProjectMashumaro(ProjectToTest):
 
 
 class ProjectMashumaroBranch(ProjectMashumaro):
-    def __init__(self, more_pytest_args=""):
+    def __init__(self, more_pytest_args: str = ""):
         super().__init__(more_pytest_args="--cov-branch " + more_pytest_args)
         self.slug = "mashbranch"
 
@@ -350,23 +407,25 @@ class ProjectMashumaroBranch(ProjectMashumaro):
 class ProjectOperator(ProjectToTest):
     git_url = "https://github.com/nedbat/operator"
 
-    def __init__(self, more_pytest_args=""):
+    def __init__(self, more_pytest_args: str = ""):
         super().__init__()
         self.more_pytest_args = more_pytest_args
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         env.shell.run_command(f"{env.python} -m pip install tox")
         Path("/tmp/operator_tmp").mkdir(exist_ok=True)
         env.shell.run_command(f"{env.python} -m tox -e unit --notest")
         env.shell.run_command(f"{env.python} -m tox -e unitnocov --notest")
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         env.shell.run_command(
             f"TMPDIR=/tmp/operator_tmp {env.python} -m tox -e unitnocov --skip-pkg-install -- {self.more_pytest_args}"
         )
         return env.shell.last_duration
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         env.shell.run_command(f"{env.python} -m pip install {pip_args}")
         env.shell.run_command(
             f"TMPDIR=/tmp/operator_tmp {env.python} -m tox -e unit --skip-pkg-install -- {self.more_pytest_args}"
@@ -377,9 +436,250 @@ class ProjectOperator(ProjectToTest):
         return duration
 
 
-def tweak_toml_coverage_settings(
-    toml_file: str, tweaks: Iterable[Tuple[str, Any]]
-) -> Iterator[None]:
+class ProjectPygments(ToxProject):
+    git_url = "https://github.com/pygments/pygments"
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        self.run_tox(env, env.pyver.toxenv, "--notest")
+        env.shell.run_command(
+            f".tox/{env.pyver.toxenv}/bin/python -m pip install {pip_args}"
+        )
+        with self.tweak_coverage_settings(cov_tweaks):
+            self.pre_check(env)  # NOTE: Not properly factored, and only used from here.
+            duration = self.run_tox(env, env.pyver.toxenv, "--skip-pkg-install -- --cov")
+            self.post_check(
+                env
+            )  # NOTE: Not properly factored, and only used from here.
+        return duration
+
+
+class ProjectRich(ToxProject):
+    git_url = "https://github.com/Textualize/rich"
+
+    def prep_environment(self, env: Env) -> None:
+        raise Exception("Doesn't work due to poetry install error.")
+
+
+class ProjectTornado(ToxProject):
+    git_url = "https://github.com/tornadoweb/tornado"
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m tornado.test")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m coverage run -m tornado.test"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectDulwich(ToxProject):
+    git_url = "https://github.com/jelmer/dulwich"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install -r requirements.txt")
+        env.shell.run_command(f"{env.python} -m pip install .")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m unittest tests.test_suite")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m coverage run -m unittest tests.test_suite"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectBlack(ToxProject):
+    git_url = "https://github.com/psf/black"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install -r test_requirements.txt")
+        env.shell.run_command(f"{env.python} -m pip install -e .[d]")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(
+            f"{env.python} -m pytest tests --run-optional no_jupyter --no-cov --numprocesses 1"
+        )
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m pytest tests --run-optional no_jupyter --cov --numprocesses 1"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectMpmath(ProjectToTest):
+    git_url = "https://github.com/mpmath/mpmath"
+    select = "-k 'not (torture or extra or functions2 or calculus or cli or elliptic or quad)'"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install .[develop]")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m pytest {self.select} --no-cov")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(
+            f"{env.python} -m pytest {self.select} --cov=mpmath"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectMypy(ToxProject):
+    git_url = "https://github.com/python/mypy"
+
+    # Slow test suites
+    CMDLINE = "PythonCmdline"
+    PEP561 = "PEP561Suite"
+    EVALUATION = "PythonEvaluation"
+    DAEMON = "testdaemon"
+    STUBGEN_CMD = "StubgenCmdLine"
+    STUBGEN_PY = "StubgenPythonSuite"
+    MYPYC_RUN = "TestRun"
+    MYPYC_RUN_MULTI = "TestRunMultiFile"
+    MYPYC_EXTERNAL = "TestExternal"
+    MYPYC_COMMAND_LINE = "TestCommandLine"
+    ERROR_STREAM = "ErrorStreamSuite"
+
+    ALL_NON_FAST = (
+        CMDLINE,
+        PEP561,
+        EVALUATION,
+        DAEMON,
+        STUBGEN_CMD,
+        STUBGEN_PY,
+        MYPYC_RUN,
+        MYPYC_RUN_MULTI,
+        MYPYC_EXTERNAL,
+        MYPYC_COMMAND_LINE,
+        ERROR_STREAM,
+    )
+
+    FAST = "pytest", "-k", f"\"not ({' or '.join(ALL_NON_FAST)})\""
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install -r test-requirements.txt")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m {' '.join(self.FAST)} --no-cov")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m {' '.join(self.FAST)} --cov"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectHtml5lib(ToxProject):
+    git_url = "https://github.com/html5lib/html5lib-python"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install -r requirements-test.txt")
+        env.shell.run_command(f"{env.python} -m pip install .")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m pytest")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m coverage run -m pytest"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectSphinx(ToxProject):
+    git_url = "https://github.com/sphinx-doc/sphinx"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install .[test]")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m pytest")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m coverage run -m pytest"
+        )
+        duration = env.shell.last_duration
+        env.shell.run_command(f"{env.python} -m coverage combine")
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+class ProjectUrllib3(ProjectToTest):
+    git_url = "https://github.com/urllib3/urllib3"
+
+    def prep_environment(self, env: Env) -> None:
+        env.shell.run_command(f"{env.python} -m pip install -r dev-requirements.txt")
+        env.shell.run_command(f"{env.python} -m pip install .")
+
+    def run_no_coverage(self, env: Env) -> float:
+        env.shell.run_command(f"{env.python} -m pytest")
+        return env.shell.last_duration
+
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
+        env.shell.run_command(f"{env.python} -m pip install {pip_args}")
+        env.shell.run_command(
+            f"{env.python} -m coverage run -m pytest"
+        )
+        duration = env.shell.last_duration
+        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        print("Results:", report.splitlines()[-1])
+        return duration
+
+
+def tweak_toml_coverage_settings(toml_file: str, tweaks: TweaksType) -> Iterator[None]:
     if tweaks:
         toml_inserts = []
         for name, value in tweaks:
@@ -393,13 +693,13 @@ def tweak_toml_coverage_settings(
         insert = header + "\n".join(toml_inserts) + "\n"
     else:
         header = insert = ""
-    return file_replace(Path(toml_file), header, insert)
+    return file_replace(Path(toml_file), header, insert)  # type: ignore
 
 
 class AdHocProject(ProjectToTest):
     """A standalone program to run locally."""
 
-    def __init__(self, python_file, cur_dir=None, pip_args=None):
+    def __init__(self, python_file: str, cur_dir: str | None = None, pip_args: str = ""):
         super().__init__()
         self.python_file = Path(python_file)
         if not self.python_file.exists():
@@ -410,18 +710,20 @@ class AdHocProject(ProjectToTest):
         self.pip_args = pip_args
         self.slug = self.python_file.name
 
-    def get_source(self, shell):
+    def get_source(self, shell: ShellSession, retries: int = 5) -> None:
         pass
 
-    def prep_environment(self, env):
+    def prep_environment(self, env: Env) -> None:
         env.shell.run_command(f"{env.python} -m pip install {self.pip_args}")
 
-    def run_no_coverage(self, env):
+    def run_no_coverage(self, env: Env) -> float:
         with change_dir(self.cur_dir):
             env.shell.run_command(f"{env.python} {self.python_file}")
         return env.shell.last_duration
 
-    def run_with_coverage(self, env, pip_args, cov_tweaks):
+    def run_with_coverage(
+        self, env: Env, pip_args: str, cov_tweaks: TweaksType
+    ) -> float:
         env.shell.run_command(f"{env.python} -m pip install {pip_args}")
         with change_dir(self.cur_dir):
             env.shell.run_command(f"{env.python} -m coverage run {self.python_file}")
@@ -436,7 +738,7 @@ class SlipcoverBenchmark(AdHocProject):
 
     """
 
-    def __init__(self, python_file):
+    def __init__(self, python_file: str):
         super().__init__(
             python_file=f"/src/slipcover/benchmarks/{python_file}",
             cur_dir="/src/slipcover",
@@ -458,7 +760,7 @@ class PyVersion:
 class Python(PyVersion):
     """A version of CPython to use."""
 
-    def __init__(self, major, minor):
+    def __init__(self, major: int, minor: int):
         self.command = self.slug = f"python{major}.{minor}"
         self.toxenv = f"py{major}{minor}"
 
@@ -466,7 +768,7 @@ class Python(PyVersion):
 class PyPy(PyVersion):
     """A version of PyPy to use."""
 
-    def __init__(self, major, minor):
+    def __init__(self, major: int, minor: int):
         self.command = self.slug = f"pypy{major}.{minor}"
         self.toxenv = f"pypy{major}{minor}"
 
@@ -474,10 +776,11 @@ class PyPy(PyVersion):
 class AdHocPython(PyVersion):
     """A custom build of Python to use."""
 
-    def __init__(self, path, slug):
+    def __init__(self, path: str, slug: str):
         self.command = f"{path}/bin/python3"
+        file_must_exist(self.command, "python command")
         self.slug = slug
-        self.toxenv = None
+        self.toxenv = ""
 
 
 @dataclass
@@ -487,27 +790,31 @@ class Coverage:
     # Short word for messages, directories, etc
     slug: str
     # Arguments for "pip install ..."
-    pip_args: Optional[str] = None
+    pip_args: str | None = None
     # Tweaks to the .coveragerc file
-    tweaks: Optional[Iterable[Tuple[str, Any]]] = None
+    tweaks: TweaksType = None
     # Environment variables to set
-    env_vars: Optional[Dict[str, str]] = None
+    env_vars: Env_VarsType = None
 
 
 class NoCoverage(Coverage):
     """Run without coverage at all."""
 
-    def __init__(self, slug="nocov"):
+    def __init__(self, slug: str = "nocov"):
         super().__init__(slug=slug, pip_args=None)
 
 
 class CoveragePR(Coverage):
     """A version of coverage.py from a pull request."""
 
-    def __init__(self, number, tweaks=None, env_vars=None):
+    def __init__(
+        self, number: int, tweaks: TweaksType = None, env_vars: Env_VarsType = None
+    ):
+        url = f"https://github.com/nedbat/coveragepy.git@refs/pull/{number}/merge"
+        url_must_exist(url)
         super().__init__(
             slug=f"#{number}",
-            pip_args=f"git+https://github.com/nedbat/coveragepy.git@refs/pull/{number}/merge",
+            pip_args=f"git+{url}",
             tweaks=tweaks,
             env_vars=env_vars,
         )
@@ -516,10 +823,14 @@ class CoveragePR(Coverage):
 class CoverageCommit(Coverage):
     """A version of coverage.py from a specific commit."""
 
-    def __init__(self, sha, tweaks=None, env_vars=None):
+    def __init__(
+        self, sha: str, tweaks: TweaksType = None, env_vars: Env_VarsType = None
+                 ):
+        url = f"https://github.com/nedbat/coveragepy.git@{sha}"
+        url_must_exist(url)
         super().__init__(
             slug=sha,
-            pip_args=f"git+https://github.com/nedbat/coveragepy.git@{sha}",
+            pip_args=f"git+{url}",
             tweaks=tweaks,
             env_vars=env_vars,
         )
@@ -528,10 +839,13 @@ class CoverageCommit(Coverage):
 class CoverageSource(Coverage):
     """The coverage.py in a working tree."""
 
-    def __init__(self, directory, slug="source", tweaks=None, env_vars=None):
+    def __init__(
+        self, directory_name: str, slug: str = "source", tweaks: TweaksType = None, env_vars: Env_VarsType = None
+    ):
+        directory = file_must_exist(directory_name, "coverage directory")
         super().__init__(
             slug=slug,
-            pip_args=directory,
+            pip_args=str(directory),
             tweaks=tweaks,
             env_vars=env_vars,
         )
@@ -556,14 +870,32 @@ class Experiment:
 
     def __init__(
         self,
-        py_versions: List[PyVersion],
-        cov_versions: List[Coverage],
-        projects: List[ProjectToTest],
+        py_versions: list[PyVersion],
+        cov_versions: list[Coverage],
+        projects: list[ProjectToTest],
+        results_file: str = "results.json",
+        load: bool = False,
+        cwd: str = "",
     ):
         self.py_versions = py_versions
         self.cov_versions = cov_versions
         self.projects = projects
-        self.result_data: Dict[ResultKey, List[float]] = {}
+        self.results_file = Path(cwd) / Path(results_file)
+        self.result_data: dict[ResultKey, list[float]] = self.load_results() if load else {}
+        self.summary_data: dict[ResultKey, float] = {}
+
+    def save_results(self) -> None:
+        """Save current results to the JSON file."""
+        with self.results_file.open("w") as f:
+            json.dump({" ".join(k): v for k, v in self.result_data.items()}, f)
+
+    def load_results(self) -> dict[ResultKey, list[float]]:
+        """Load results from the JSON file if it exists."""
+        if self.results_file.exists():
+            with self.results_file.open("r") as f:
+                data: dict[str, list[float]] = json.load(f)
+            return {(k.split()[0], k.split()[1], k.split()[2]): v for k, v in data.items()}
+        return {}
 
     def run(self, num_runs: int = 3) -> None:
         total_runs = (
@@ -589,6 +921,7 @@ class Experiment:
                     shell.run_command(f"{pyver.command} -m venv {venv_dir}")
                     python = Path.cwd() / f"{venv_dir}/bin/python"
                     shell.run_command(f"{python} -V")
+                    shell.run_command(f"{python} -m pip install -U pip")
                     env = Env(pyver, python, shell)
 
                     with change_dir(proj.dir):
@@ -600,11 +933,17 @@ class Experiment:
         all_runs *= num_runs
         random.shuffle(all_runs)
 
-        run_data: Dict[ResultKey, List[float]] = collections.defaultdict(list)
+        run_data: dict[ResultKey, list[float]] = collections.defaultdict(list)
+        run_data.update(self.result_data)
 
         for proj, pyver, cov_ver, env in all_runs:
+            result_key = (proj.slug, pyver.slug, cov_ver.slug)
+            total_run_num = next(total_run_nums)
+            if result_key in self.result_data and len(self.result_data[result_key]) >= num_runs:
+                print(f"Skipping {result_key} as results already exist.")
+                continue
+
             with env.shell:
-                total_run_num = next(total_run_nums)
                 banner = (
                     "Running tests: "
                     + f"proj={proj.slug}, py={pyver.slug}, cov={cov_ver.slug}, "
@@ -614,18 +953,24 @@ class Experiment:
                 env.shell.print_banner(banner)
                 with change_dir(proj.dir):
                     with env.shell.set_env(cov_ver.env_vars):
-                        if cov_ver.pip_args is None:
-                            dur = proj.run_no_coverage(env)
-                        else:
-                            dur = proj.run_with_coverage(
-                                env,
-                                cov_ver.pip_args,
-                                cov_ver.tweaks,
-                            )
+                        try:
+                            if cov_ver.pip_args is None:
+                                dur = proj.run_no_coverage(env)
+                            else:
+                                dur = proj.run_with_coverage(
+                                    env,
+                                    cov_ver.pip_args,
+                                    cov_ver.tweaks,
+                                )
+                        except Exception as exc:
+                            print(f"!!! {exc = }")
+                            dur = float("NaN")
             print(f"Tests took {dur:.3f}s")
-            result_key = (proj.slug, pyver.slug, cov_ver.slug)
+            if result_key not in self.result_data:
+                self.result_data[result_key] = []
+            self.result_data[result_key].append(dur)
             run_data[result_key].append(dur)
-
+            self.save_results()
         # Summarize and collect the data.
         print("# Results")
         for proj in self.projects:
@@ -634,7 +979,7 @@ class Experiment:
                     result_key = (proj.slug, pyver.slug, cov_ver.slug)
                     data = run_data[result_key]
                     med = statistics.median(data)
-                    self.result_data[result_key] = med
+                    self.summary_data[result_key] = med
                     stdev = statistics.stdev(data) if len(data) > 1 else 0.0
                     summary = (
                         f"Median for {proj.slug}, {pyver.slug}, {cov_ver.slug}: "
@@ -648,9 +993,9 @@ class Experiment:
 
     def show_results(
         self,
-        rows: List[str],
+        rows: list[str],
         column: str,
-        ratios: Iterable[Tuple[str, str, str]] = (),
+        ratios: Iterable[tuple[str, str, str]] = (),
     ) -> None:
         dimensions = {
             "cov": [cov_ver.slug for cov_ver in self.cov_versions],
@@ -671,13 +1016,14 @@ class Experiment:
         data = []
 
         for tup in itertools.product(*table_axes):
-            row = []
+            row: list[str] = []
             row.extend(tup)
             col_data = {}
             for col in dimensions[column]:
                 key = (*tup, col)
                 key = tuple(key[i] for i in remap)
-                result_time = self.result_data[key]  # type: ignore
+                key = cast(ResultKey, key)
+                result_time = self.summary_data[key]
                 row.append(f"{result_time:.1f}s")
                 col_data[col] = result_time
             for _, num, denom in ratios:
@@ -693,13 +1039,29 @@ PERF_DIR = Path("/tmp/covperf")
 
 
 def run_experiment(
-    py_versions: List[PyVersion],
-    cov_versions: List[Coverage],
-    projects: List[ProjectToTest],
-    rows: List[str],
+    py_versions: list[PyVersion],
+    cov_versions: list[Coverage],
+    projects: list[ProjectToTest],
+    rows: list[str],
     column: str,
-    ratios: Iterable[Tuple[str, str, str]] = (),
-):
+    ratios: Iterable[tuple[str, str, str]] = (),
+    num_runs: int = int(sys.argv[1]),
+    load: bool = False,
+) -> None:
+    """
+    Run a benchmarking experiment and print a table of results.
+
+    Arguments:
+
+        py_versions: The Python versions to test.
+        cov_versions: The coverage versions to test.
+        projects: The projects to run.
+        rows: A list of strings chosen from `"pyver"`, `"cov"`, and `"proj"`.
+        column: The remaining dimension not used in `rows`.
+        ratios: A list of triples: (title, slug1, slug2).
+        num_runs: The number of times to run each matrix element.
+
+    """
     slugs = [v.slug for v in py_versions + cov_versions + projects]
     if len(set(slugs)) != len(slugs):
         raise Exception(f"Slugs must be unique: {slugs}")
@@ -716,9 +1078,10 @@ def run_experiment(
     print(f"Removing and re-making {PERF_DIR}")
     rmrf(PERF_DIR)
 
+    cwd = str(Path.cwd())
     with change_dir(PERF_DIR):
         exp = Experiment(
-            py_versions=py_versions, cov_versions=cov_versions, projects=projects
+            py_versions=py_versions, cov_versions=cov_versions, projects=projects, load=load, cwd=cwd
         )
-        exp.run(num_runs=int(sys.argv[1]))
+        exp.run(num_runs=int(num_runs))
         exp.show_results(rows=rows, column=column, ratios=ratios)
