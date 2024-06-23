@@ -23,6 +23,16 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+Nothing yet.
+
+
+.. scriv-start-here
+
+.. _changes_7-5-4:
+
+Version 7.5.4 — 2024-06-22
+--------------------------
+
 - If you attempt to combine statement coverage data with branch coverage data,
   coverage.py used to fail with the message "Can't combine arc data with line
   data" or its reverse, "Can't combine line data with arc data."  These
@@ -34,10 +44,10 @@ Unreleased
   names or guard clauses.
 
 - Started testing on 3.13 free-threading (nogil) builds of Python.  I'm not
-  claiming full support yet.
+  claiming full support yet.  Closes `issue 1799`_.
 
+.. _issue 1799: https://github.com/nedbat/coveragepy/issues/1799
 
-.. scriv-start-here
 
 .. _changes_7-5-3:
 
