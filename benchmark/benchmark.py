@@ -16,6 +16,7 @@ import statistics
 import subprocess
 import sys
 import time
+import traceback
 
 from pathlib import Path
 
@@ -279,7 +280,8 @@ class ToxProject(ProjectToTest):
     env_vars: Env_VarsType = {
         **(ProjectToTest.env_vars or {}),
         # Allow some environment variables into the tox execution.
-        "TOX_OVERRIDE": "testenv.pass_env+=COVERAGE_DEBUG,COVERAGE_CORE",
+        "TOX_OVERRIDE": "testenv.pass_env+=COVERAGE_DEBUG,COVERAGE_CORE,COVERAGE_FORCE_CONFIG",
+        "COVERAGE_DEBUG": "config,sys",
     }
 
     def prep_environment(self, env: Env) -> None:
@@ -553,47 +555,37 @@ class ProjectMpmath(ProjectToTest):
 class ProjectMypy(ToxProject):
     git_url = "https://github.com/python/mypy"
 
-    # Slow test suites
-    CMDLINE = "PythonCmdline"
-    PEP561 = "PEP561Suite"
-    EVALUATION = "PythonEvaluation"
-    DAEMON = "testdaemon"
-    STUBGEN_CMD = "StubgenCmdLine"
-    STUBGEN_PY = "StubgenPythonSuite"
-    MYPYC_RUN = "TestRun"
-    MYPYC_RUN_MULTI = "TestRunMultiFile"
-    MYPYC_EXTERNAL = "TestExternal"
-    MYPYC_COMMAND_LINE = "TestCommandLine"
-    ERROR_STREAM = "ErrorStreamSuite"
+    SLOW_TESTS = " or ".join([
+        "PythonCmdline",
+        "PEP561Suite",
+        "PythonEvaluation",
+        "testdaemon",
+        "StubgenCmdLine",
+        "StubgenPythonSuite",
+        "TestRun",
+        "TestRunMultiFile",
+        "TestExternal",
+        "TestCommandLine",
+        "ErrorStreamSuite",
+    ])
 
-    ALL_NON_FAST = (
-        CMDLINE,
-        PEP561,
-        EVALUATION,
-        DAEMON,
-        STUBGEN_CMD,
-        STUBGEN_PY,
-        MYPYC_RUN,
-        MYPYC_RUN_MULTI,
-        MYPYC_EXTERNAL,
-        MYPYC_COMMAND_LINE,
-        ERROR_STREAM,
-    )
-
-    FAST = "pytest", "-k", f"\"not ({' or '.join(ALL_NON_FAST)})\""
+    FAST = f"-k 'not ({SLOW_TESTS})'"
 
     def prep_environment(self, env: Env) -> None:
         env.shell.run_command(f"{env.python} -m pip install -r test-requirements.txt")
 
     def run_no_coverage(self, env: Env) -> float:
-        env.shell.run_command(f"{env.python} -m {' '.join(self.FAST)} --no-cov")
+        env.shell.run_command(f"{env.python} -m pytest {self.FAST} --no-cov")
         return env.shell.last_duration
 
     def run_with_coverage(self, env: Env, cov_ver: Coverage) -> float:
         env.shell.run_command(f"{env.python} -m pip install {cov_ver.pip_args}")
-        env.shell.run_command(f"{env.python} -m {' '.join(self.FAST)} --cov")
-        duration = env.shell.last_duration
-        report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
+        pforce = Path("force.ini")
+        pforce.write_text("[run]\nbranch=false\n")
+        with env.shell.set_env({"COVERAGE_FORCE_CONFIG": str(pforce.resolve())}):
+            env.shell.run_command(f"{env.python} -m pytest {self.FAST} --cov")
+            duration = env.shell.last_duration
+            report = env.shell.run_command(f"{env.python} -m coverage report --precision=6")
         print("Results:", report.splitlines()[-1])
         return duration
 
@@ -820,7 +812,7 @@ class CoverageSource(Coverage):
 
     def __init__(
         self,
-        directory_name: str,
+        directory_name: str = "..",
         slug: str = "source",
         tweaks: TweaksType = None,
         env_vars: Env_VarsType = None,
@@ -950,6 +942,7 @@ class Experiment:
                                 dur = proj.run_with_coverage(env, cov_ver)
                         except Exception as exc:
                             print(f"!!! {exc = }")
+                            traceback.print_exc(file=env.shell.foutput)
                             dur = float("NaN")
             print(f"Tests took {dur:.3f}s")
             if result_key not in self.result_data:
@@ -957,6 +950,7 @@ class Experiment:
             self.result_data[result_key].append(dur)
             run_data[result_key].append(dur)
             self.save_results()
+
         # Summarize and collect the data.
         print("# Results")
         for proj in self.projects:
