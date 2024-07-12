@@ -23,6 +23,16 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+Nothing yet.
+
+
+.. scriv-start-here
+
+.. _changes_7-6-0:
+
+Version 7.6.0 — 2024-07-11
+--------------------------
+
 - Exclusion patterns can now be multi-line, thanks to `Daniel Diniz <pull
   1807_>`_.  This enables many interesting exclusion use-cases, including those
   requested in issues `118 <issue 118_>`_ (entire files), `996
@@ -31,16 +41,23 @@ Unreleased
   (arbitrary sequence of marked lines).  See the :ref:`multi_line_exclude`
   section of the docs for more details and examples.
 
+- The JSON report now includes per-function and per-class coverage information.
+  Thanks to `Daniel Diniz <pull 1809_>`_ for getting the work started. This
+  closes `issue 1793`_ and `issue 1532`_.
+
+- Fixed an incorrect calculation of "(no class)" lines in the HTML classes
+  report.
+
 - Python 3.13.0b3 is supported.
 
 .. _issue 118: https://github.com/nedbat/coveragepy/issues/118
 .. _issue 996: https://github.com/nedbat/coveragepy/issues/996
+.. _issue 1532: https://github.com/nedbat/coveragepy/issues/1532
 .. _issue 1741: https://github.com/nedbat/coveragepy/issues/1741
+.. _issue 1793: https://github.com/nedbat/coveragepy/issues/1793
 .. _issue 1803: https://github.com/nedbat/coveragepy/issues/1803
-
 .. _pull 1807: https://github.com/nedbat/coveragepy/pull/1807
-
-.. scriv-start-here
+.. _pull 1809: https://github.com/nedbat/coveragepy/pull/1809
 
 .. _changes_7-5-4:
 
