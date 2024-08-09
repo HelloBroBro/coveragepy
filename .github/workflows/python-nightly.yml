@@ -60,7 +60,6 @@ jobs:
           - "3.13-dev"
           - "3.14-dev"
           # https://github.com/actions/setup-python#available-versions-of-pypy
-          - "pypy-3.8-nightly"
           - "pypy-3.9-nightly"
           - "pypy-3.10-nightly"
         nogil:
@@ -72,8 +71,6 @@ jobs:
             os-short: "windows"
         exclude:
           - python-version: "3.12-dev"
-            nogil: true
-          - python-version: "pypy-3.8-nightly"
             nogil: true
           - python-version: "pypy-3.9-nightly"
             nogil: true
@@ -109,6 +106,22 @@ jobs:
           python -m coverage debug sys
           python -m coverage debug pybehave
           env | sort
+
+      - name: "Check build recency"
+        #if: "!startsWith(matrix.python-version, 'pypy-')"
+        shell: python
+        run: |
+          import platform
+          from datetime import datetime
+          for fmt in ["%b %d %Y %H:%M:%S", "%b %d %Y"]:
+              try:
+                  built = datetime.strptime(platform.python_build()[1], fmt)
+              except ValueError:
+                  continue
+          now = datetime.now()
+          days = (now - built).days
+          print(f"Days since Python was built: {days}")
+          assert days <= 7
 
       - name: "Install dependencies"
         run: |
