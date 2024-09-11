@@ -886,7 +886,22 @@ Settings particular to LCOV reporting (see :ref:`cmd_lcov`).
 
 .. versionadded:: 6.3
 
+.. _config_lcov_output:
+
 [lcov] output
 .............
 
 (string, default "coverage.lcov") Where to write the LCOV file.
+
+.. _config_lcov_line_checksums:
+
+[lcov] line_checksums
+.....................
+
+(boolean, default false) Whether to write per-line checksums as part of the
+lcov file.  Because these checksums cover only lines with actual code on
+them, and do not verify the ordering of lines, they provide only a weak
+assurance that the source code available to analysis tools (e.g. ``genhtml``)
+matches the code that was used to generate the coverage data.
+
+.. versionadded:: 7.6.2
