@@ -21,8 +21,9 @@ import _thread
 
 from typing import (
     overload,
-    Any, Callable, IO, Iterable, Iterator, Mapping,
+    Any, Callable, IO,
 )
+from collections.abc import Iterable, Iterator, Mapping
 
 from coverage.misc import human_sorted_items, isolate_module
 from coverage.types import AnyCallable, TWritable
@@ -379,9 +380,8 @@ class ProcessTracker:
             welcome = (
                 f"New process: {pid=}, executable: {sys.executable!r}\n"
                 + f"New process: cmd: {argv!r}\n"
+                + f"New process parent pid: {os.getppid()!r}\n"
             )
-            if hasattr(os, "getppid"):
-                welcome += f"New process parent pid: {os.getppid()!r}\n"
 
         if welcome:
             self.did_welcome = True

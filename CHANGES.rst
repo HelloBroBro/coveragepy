@@ -23,6 +23,8 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+- Dropped support for Python 3.8 and PyPy 3.8.
+
 - Fix: a final wildcard match/case clause assigning to a name (``case _ as
   value``) was incorrectly marked as a missing branch.  This is now fixed,
   closing `issue 1860`_.
@@ -35,12 +37,13 @@ Unreleased
   a backslash continuation.  This is now fixed, closing `issue 1836`_, thanks
   to `LiuYinCarl and Marco Ricci <pull 1838_>`_.
 
-- Fix: the LCOV report now has correct line numbers for BRDA records, fixing
-  `issue 1846`_.  There are other changes to lcov also, including a new
-  configuration option :ref:`line_checksums <config_lcov_line_checksums>` to
-  control whether line checksums are included in the lcov report.  The default
-  is false. To keep checksums set it to true.  All this work is thanks to `Zack
-  Weinberg <pull 1849_>`_.
+- Fix: the LCOV report now has correct line numbers (fixing `issue 1846`_`) and
+  better branch descriptions for BRDA records (fixing `issue 1850`_).  There
+  are other changes to lcov also, including a new configuration option
+  :ref:`line_checksums <config_lcov_line_checksums>` to control whether line
+  checksums are included in the lcov report.  The default is false. To keep
+  checksums set it to true.  All this work is thanks to Zack Weinberg
+  (`pull 1849_` and `pull 1851`_).
 
 - Fixed the docs for multi-line regex exclusions, closing `issue 1863`_.
 
@@ -53,6 +56,8 @@ Unreleased
 .. _pull 1843: https://github.com/nedbat/coveragepy/pull/1843
 .. _issue 1846: https://github.com/nedbat/coveragepy/issues/1846
 .. _pull 1849: https://github.com/nedbat/coveragepy/pull/1849
+.. _issue 1850: https://github.com/nedbat/coveragepy/issues/1850
+.. _pull 1851: https://github.com/nedbat/coveragepy/pull/1851
 .. _issue 1860: https://github.com/nedbat/coveragepy/issues/1860
 .. _issue 1863: https://github.com/nedbat/coveragepy/issues/1863
 

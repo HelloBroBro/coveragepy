@@ -20,11 +20,11 @@ import warnings
 
 from pathlib import Path
 from typing import (
-    Any, Callable, Iterable, Iterator, NoReturn, TypeVar, cast,
+    Any, Callable, NoReturn, TypeVar, cast,
 )
+from collections.abc import Iterable, Iterator
 
 import flaky
-import pytest
 
 from coverage import env
 from coverage.debug import DebugControl
@@ -324,12 +324,6 @@ def swallow_warnings(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=category, message=message)
         yield
-
-
-xfail_pypy38 = pytest.mark.xfail(
-    env.PYPY and env.PYVERSION[:2] == (3, 8) and env.PYPYVERSION < (7, 3, 11),
-    reason="These tests fail on older PyPy 3.8",
-)
 
 
 class FailingProxy:

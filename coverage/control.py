@@ -19,10 +19,8 @@ import time
 import warnings
 
 from types import FrameType
-from typing import (
-    cast,
-    Any, Callable, IO, Iterable, Iterator, List,
-)
+from typing import cast, Any, Callable, IO
+from collections.abc import Iterable, Iterator
 
 from coverage import env
 from coverage.annotate import AnnotateReporter
@@ -784,7 +782,7 @@ class Coverage(TConfigurable):
 
         """
         self._init()
-        return cast(List[str], getattr(self.config, which + "_list"))
+        return cast(list[str], getattr(self.config, which + "_list"))
 
     def save(self) -> None:
         """Save the collected coverage data to the data file."""

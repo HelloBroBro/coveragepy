@@ -8,9 +8,9 @@ from __future__ import annotations
 import math
 import textwrap
 
-from tests.coveragetest import CoverageTest
-
 import coverage
+
+from tests.coveragetest import CoverageTest
 
 
 class LcovTest(CoverageTest):
@@ -64,6 +64,12 @@ class LcovTest(CoverageTest):
             DA:5,0
             LF:4
             LH:2
+            FN:1,2,cuboid_volume
+            FNDA:0,cuboid_volume
+            FN:4,5,IsItTrue
+            FNDA:0,IsItTrue
+            FNF:2
+            FNH:0
             end_of_record
             """)
         self.assert_doesnt_exist(".coverage")
@@ -96,6 +102,12 @@ class LcovTest(CoverageTest):
             DA:5,0,LWILTcvARcydjFFyo9qM0A
             LF:4
             LH:2
+            FN:1,2,cuboid_volume
+            FNDA:0,cuboid_volume
+            FN:4,5,IsItTrue
+            FNDA:0,IsItTrue
+            FNF:2
+            FNH:0
             end_of_record
             """)
         actual_result = self.get_lcov_report_content()
@@ -120,6 +132,12 @@ class LcovTest(CoverageTest):
             DA:5,0
             LF:4
             LH:2
+            FN:1,2,cuboid_volume
+            FNDA:0,cuboid_volume
+            FN:4,5,IsItTrue
+            FNDA:0,IsItTrue
+            FNF:2
+            FNH:0
             end_of_record
             SF:test_file.py
             DA:1,1
@@ -132,6 +150,10 @@ class LcovTest(CoverageTest):
             DA:9,0
             LF:8
             LH:4
+            FN:5,9,TestCuboid.test_volume
+            FNDA:0,TestCuboid.test_volume
+            FNF:1
+            FNH:0
             end_of_record
             """)
         actual_result = self.get_lcov_report_content(filename="data.lcov")
@@ -160,8 +182,12 @@ class LcovTest(CoverageTest):
             DA:5,0
             LF:4
             LH:1
-            BRDA:2,0,0,-
-            BRDA:2,0,1,-
+            FN:1,5,is_it_x
+            FNDA:0,is_it_x
+            FNF:1
+            FNH:0
+            BRDA:2,0,jump to line 3,-
+            BRDA:2,0,jump to line 5,-
             BRF:2
             BRH:0
             end_of_record
@@ -203,8 +229,12 @@ class LcovTest(CoverageTest):
             DA:5,0
             LF:4
             LH:1
-            BRDA:2,0,0,-
-            BRDA:2,0,1,-
+            FN:1,5,is_it_x
+            FNDA:0,is_it_x
+            FNF:1
+            FNH:0
+            BRDA:2,0,jump to line 3,-
+            BRDA:2,0,jump to line 5,-
             BRF:2
             BRH:0
             end_of_record
@@ -217,6 +247,10 @@ class LcovTest(CoverageTest):
             DA:7,0
             LF:6
             LH:4
+            FN:5,7,TestIsItX.test_is_it_x
+            FNDA:0,TestIsItX.test_is_it_x
+            FNF:1
+            FNH:0
             end_of_record
             """)
         actual_result = self.get_lcov_report_content()
@@ -247,8 +281,8 @@ class LcovTest(CoverageTest):
             DA:6,0
             LF:4
             LH:3
-            BRDA:3,0,0,1
-            BRDA:3,0,1,0
+            BRDA:3,0,jump to line 4,1
+            BRDA:3,0,jump to line 6,0
             BRF:2
             BRH:1
             end_of_record
@@ -315,10 +349,179 @@ class LcovTest(CoverageTest):
             DA:6,1
             LF:4
             LH:3
-            BRDA:3,0,0,0
-            BRDA:3,0,1,1
+            BRDA:3,0,jump to line 4,0
+            BRDA:3,0,jump to line 6,1
             BRF:2
             BRH:1
+            end_of_record
+            """)
+        actual_result = self.get_lcov_report_content()
+        assert expected_result == actual_result
+
+    def test_exit_branches(self) -> None:
+        self.make_file("runme.py", """\
+            def foo(a):
+                if a:
+                    print(f"{a!r} is truthy")
+            foo(True)
+            foo(False)
+            foo([])
+            foo([0])
+        """)
+        cov = coverage.Coverage(source=".", branch=True)
+        self.start_import_stop(cov, "runme")
+        cov.lcov_report()
+        expected_result = textwrap.dedent("""\
+            SF:runme.py
+            DA:1,1
+            DA:2,1
+            DA:3,1
+            DA:4,1
+            DA:5,1
+            DA:6,1
+            DA:7,1
+            LF:7
+            LH:7
+            FN:1,3,foo
+            FNDA:1,foo
+            FNF:1
+            FNH:1
+            BRDA:2,0,jump to line 3,1
+            BRDA:2,0,return from function 'foo',1
+            BRF:2
+            BRH:2
+            end_of_record
+            """)
+        actual_result = self.get_lcov_report_content()
+        assert expected_result == actual_result
+
+    def test_genexpr_exit_arcs_pruned_full_coverage(self) -> None:
+        self.make_file("runme.py", """\
+            def foo(a):
+                if any(x > 0 for x in a):
+                    print(f"{a!r} has positives")
+            foo([])
+            foo([0])
+            foo([0,1])
+            foo([0,-1])
+        """)
+        cov = coverage.Coverage(source=".", branch=True)
+        self.start_import_stop(cov, "runme")
+        cov.lcov_report()
+        expected_result = textwrap.dedent("""\
+            SF:runme.py
+            DA:1,1
+            DA:2,1
+            DA:3,1
+            DA:4,1
+            DA:5,1
+            DA:6,1
+            DA:7,1
+            LF:7
+            LH:7
+            FN:1,3,foo
+            FNDA:1,foo
+            FNF:1
+            FNH:1
+            BRDA:2,0,jump to line 3,1
+            BRDA:2,0,return from function 'foo',1
+            BRF:2
+            BRH:2
+            end_of_record
+            """)
+        actual_result = self.get_lcov_report_content()
+        assert expected_result == actual_result
+
+    def test_genexpr_exit_arcs_pruned_never_true(self) -> None:
+        self.make_file("runme.py", """\
+            def foo(a):
+                if any(x > 0 for x in a):
+                    print(f"{a!r} has positives")
+            foo([])
+            foo([0])
+        """)
+        cov = coverage.Coverage(source=".", branch=True)
+        self.start_import_stop(cov, "runme")
+        cov.lcov_report()
+        expected_result = textwrap.dedent("""\
+            SF:runme.py
+            DA:1,1
+            DA:2,1
+            DA:3,0
+            DA:4,1
+            DA:5,1
+            LF:5
+            LH:4
+            FN:1,3,foo
+            FNDA:1,foo
+            FNF:1
+            FNH:1
+            BRDA:2,0,jump to line 3,0
+            BRDA:2,0,return from function 'foo',1
+            BRF:2
+            BRH:1
+            end_of_record
+            """)
+        actual_result = self.get_lcov_report_content()
+        assert expected_result == actual_result
+
+    def test_genexpr_exit_arcs_pruned_always_true(self) -> None:
+        self.make_file("runme.py", """\
+            def foo(a):
+                if any(x > 0 for x in a):
+                    print(f"{a!r} has positives")
+            foo([1])
+            foo([1,2])
+        """)
+        cov = coverage.Coverage(source=".", branch=True)
+        self.start_import_stop(cov, "runme")
+        cov.lcov_report()
+        expected_result = textwrap.dedent("""\
+            SF:runme.py
+            DA:1,1
+            DA:2,1
+            DA:3,1
+            DA:4,1
+            DA:5,1
+            LF:5
+            LH:5
+            FN:1,3,foo
+            FNDA:1,foo
+            FNF:1
+            FNH:1
+            BRDA:2,0,jump to line 3,1
+            BRDA:2,0,return from function 'foo',0
+            BRF:2
+            BRH:1
+            end_of_record
+            """)
+        actual_result = self.get_lcov_report_content()
+        assert expected_result == actual_result
+
+    def test_genexpr_exit_arcs_pruned_not_reached(self) -> None:
+        self.make_file("runme.py", """\
+            def foo(a):
+                if any(x > 0 for x in a):
+                    print(f"{a!r} has positives")
+        """)
+        cov = coverage.Coverage(source=".", branch=True)
+        self.start_import_stop(cov, "runme")
+        cov.lcov_report()
+        expected_result = textwrap.dedent("""\
+            SF:runme.py
+            DA:1,1
+            DA:2,0
+            DA:3,0
+            LF:3
+            LH:1
+            FN:1,3,foo
+            FNDA:0,foo
+            FNF:1
+            FNH:0
+            BRDA:2,0,jump to line 3,-
+            BRDA:2,0,return from function 'foo',-
+            BRF:2
+            BRH:0
             end_of_record
             """)
         actual_result = self.get_lcov_report_content()

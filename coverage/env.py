@@ -9,7 +9,8 @@ import os
 import platform
 import sys
 
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 # debug_info() at the bottom wants to show all the globals, but not imports.
 # Grab the global names here to know which names to not show. Nothing defined
@@ -34,6 +35,7 @@ PYPY = (platform.python_implementation() == "PyPy")
 PYVERSION = sys.version_info + (int(platform.python_version()[-1] == "+"),)
 
 if PYPY:
+    # Minimum now is 7.3.16
     PYPYVERSION = sys.pypy_version_info         # type: ignore[attr-defined]
 else:
     PYPYVERSION = (0,)
@@ -53,29 +55,15 @@ class PYBEHAVIOR:
     # across versions.
     if pep626:
         optimize_if_not_debug = 1
-    elif PYPY:
-        if PYVERSION >= (3, 9):
-            optimize_if_not_debug = 2
-        else:
-            optimize_if_not_debug = 3
     else:
         optimize_if_not_debug = 2
 
     # 3.7 changed how functions with only docstrings are numbered.
     docstring_only_function = (not PYPY) and (PYVERSION <= (3, 10))
 
-    # CPython 3.9a1 made sys.argv[0] and other reported files absolute paths.
-    report_absolute_files = (
-        (CPYTHON or (PYPY and PYPYVERSION >= (7, 3, 10)))
-        and PYVERSION >= (3, 9)
-    )
-
     # Lines after break/continue/return/raise are no longer compiled into the
     # bytecode.  They used to be marked as missing, now they aren't executable.
-    omit_after_jump = (
-        pep626
-        or (PYPY and PYVERSION >= (3, 9) and PYPYVERSION >= (7, 3, 12))
-    )
+    omit_after_jump = pep626 or PYPY
 
     # PyPy has always omitted statements after return.
     omit_after_return = omit_after_jump or PYPY

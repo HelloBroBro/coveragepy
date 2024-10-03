@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from tests.coveragetest import CoverageTest
-from tests.helpers import assert_count_equal, xfail_pypy38
+from tests.helpers import assert_count_equal
 
 import coverage
 from coverage import env
@@ -1544,18 +1544,12 @@ class OptimizedIfTest(CoverageTest):
             branchz_missing=branchz_missing,
         )
 
-    @pytest.mark.xfail(
-        env.PYPY and env.PYVERSION[:2] == (3, 8) and env.PYPYVERSION >= (7, 3, 11),
-        reason="https://foss.heptapod.net/pypy/pypy/-/issues/3882",
-    )
     def test_if_not_debug(self) -> None:
         if env.PYBEHAVIOR.optimize_if_not_debug == 1:
             branchz = "23 28 34 37"
-        elif env.PYBEHAVIOR.optimize_if_not_debug == 2:
-            branchz = "23 28 35 37"
         else:
-            assert env.PYBEHAVIOR.optimize_if_not_debug == 3
-            branchz = "23 28 32 37"
+            assert env.PYBEHAVIOR.optimize_if_not_debug == 2
+            branchz = "23 28 35 37"
 
         self.check_coverage("""\
             lines = set()
@@ -1695,7 +1689,6 @@ class DecoratorArcTest(CoverageTest):
             branchz="", branchz_missing="",
         )
 
-    @xfail_pypy38
     def test_class_decorator(self) -> None:
         self.check_coverage("""\
             def decorator(arg):
