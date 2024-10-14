@@ -23,13 +23,26 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+Nothing yet.
+
+
+.. start-releases
+
+.. _changes_7-6-3:
+
+Version 7.6.3 — 2024-10-13
+--------------------------
+
+- Fix: nested context managers could incorrectly be analyzed to flag a missing
+  branch on the last context manager, as described in `issue 1876`_.  This is
+  now fixed.
+
 - Fix: the missing branch message about not exiting a module had an extra
   "didn't," as described in `issue 1873`_.  This is now fixed.
 
 .. _issue 1873: https://github.com/nedbat/coveragepy/issues/1873
+.. _issue 1876: https://github.com/nedbat/coveragepy/issues/1876
 
-
-.. start-releases
 
 .. _changes_7-6-2:
 
