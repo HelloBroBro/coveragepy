@@ -28,6 +28,17 @@ Nothing yet.
 
 .. start-releases
 
+.. _changes_7-6-4:
+
+Version 7.6.4 — 2024-10-20
+--------------------------
+
+- fix: multi-line ``with`` statements could cause contained branches to be
+  incorrectly marked as missing (`issue 1880`_).  This is now fixed.
+
+.. _issue 1880: https://github.com/nedbat/coveragepy/issues/1880
+
+
 .. _changes_7-6-3:
 
 Version 7.6.3 — 2024-10-13
