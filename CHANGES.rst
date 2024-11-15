@@ -23,15 +23,28 @@ upgrading your version of coverage.py.
 Unreleased
 ----------
 
+Nothing yet.
+
+
+.. start-releases
+
+.. _changes_7-6-5:
+
+Version 7.6.5 — 2024-11-14
+--------------------------
+
 - fix: fine-tuned the exact Python version (3.12.6) when exiting from ``with``
   statements changed how they traced.  This affected whether people saw the
   fix for `issue 1880`_.
 
+- fix: isolate our code more from mocking in the os module that in rare cases
+  can cause `bizarre behavior <pytest-cov-666_>`_.
+
 - refactor: some code unreachable code paths in parser.py were changed to
   asserts.  If you encounter any of these, please let me know!
 
+.. _pytest-cov-666: https://github.com/pytest-dev/pytest-cov/issues/666
 
-.. start-releases
 
 .. _changes_7-6-4:
 
