@@ -437,15 +437,15 @@ class ByteParser:
             byte_num = 0
             for byte_incr, line_incr in zip(byte_increments, line_increments):
                 if byte_incr:
-                    assert line_num != last_line_num, f"Oops, {byte_incr = }, {line_incr = }"
-                    yield line_num
-                    last_line_num = line_num
+                    if line_num != last_line_num:
+                        yield line_num
+                        last_line_num = line_num
                     byte_num += byte_incr
                 if line_incr >= 0x80:
                     line_incr -= 0x100
                 line_num += line_incr
-            assert line_num != last_line_num
-            yield line_num
+            if line_num != last_line_num:
+                yield line_num
 
     def _find_statements(self) -> Iterable[TLineNo]:
         """Find the statements in `self.code`.

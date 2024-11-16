@@ -28,6 +28,26 @@ Nothing yet.
 
 .. start-releases
 
+.. _changes_7-6-7:
+
+Version 7.6.7 — 2024-11-15
+--------------------------
+
+- fix: ugh, the other assert from 7.6.5 can also be encountered in the wild,
+  so it's been restored to a conditional.  Sorry for the churn.
+
+
+.. _changes_7-6-6:
+
+Version 7.6.6 — 2024-11-15
+--------------------------
+
+- One of the new asserts from 7.6.5 caused problems in real projects, as
+  reported in `issue 1891`_.  The assert has been removed.
+
+.. _issue 1891: https://github.com/nedbat/coveragepy/issues/1891
+
+
 .. _changes_7-6-5:
 
 Version 7.6.5 — 2024-11-14
