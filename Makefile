@@ -177,10 +177,11 @@ sample_html_beta: _sample_cog_html	## Generate sample HTML report for a beta rel
 ##@ Kitting: making releases
 
 .PHONY: release_version edit_for_release cheats relbranch relcommit1 relcommit2
-.PHONY: kit pypi_upload test_upload kit_local build_kits
+.PHONY: kit pypi_upload test_upload kit_local build_kits update_rtd
 .PHONY: tag bump_version
 
 REPO_OWNER = nedbat/coveragepy
+RTD_PROJECT = coverage
 
 release_version:			#: Update the version for a release.
 	python igor.py release_version
@@ -192,7 +193,7 @@ cheats:					## Create some useful snippets for releasing.
 	python igor.py cheats | tee cheats.txt
 
 relbranch:				#: Create the branch for releasing (see howto.txt).
-	git switch -c nedbat/release-$$(date +%Y%m%d)
+	git switch -c nedbat/release-$$(date +%Y%m%d-%H%M%S)
 
 relcommit1:				#: Commit the first release changes (see howto.txt).
 	git commit -am "docs: prep for $$(python setup.py --version)"
@@ -206,9 +207,11 @@ kit:					## Make the source distribution.
 
 pypi_upload:				## Upload the built distributions to PyPI.
 	python ci/trigger_action.py $(REPO_OWNER) publish-pypi
+	@echo "Use that^ URL to approve the upload"
 
 test_upload:				## Upload the distributions to PyPI's testing server.
 	python ci/trigger_action.py $(REPO_OWNER) publish-testpypi
+	@echo "Use that^ URL to approve the upload"
 
 kit_local:
 	# pip.conf looks like this:
@@ -225,6 +228,9 @@ build_kits:				## Trigger GitHub to build kits
 tag:					#: Make a git tag with the version number (see howto.txt).
 	git tag -s -m "Version $$(python setup.py --version)" $$(python setup.py --version)
 	git push --follow-tags
+
+update_rtd:				#: Update ReadTheDocs with the versions to show
+	python ci/update-rtfd.py $(RTD_PROJECT)
 
 bump_version:				#: Edit sources to bump the version after a release (see howto.txt).
 	git switch -c nedbat/bump-version
